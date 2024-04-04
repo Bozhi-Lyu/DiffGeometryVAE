@@ -1,7 +1,7 @@
 data/
-.pt
-.png
-.pdf
+*.pt
+*.png
+*.pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
