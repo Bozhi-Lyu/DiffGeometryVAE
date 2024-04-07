@@ -14,6 +14,8 @@ torch.manual_seed(0)
 import matplotlib
 matplotlib.use('TkAgg')
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 class GaussianPrior(nn.Module):
     def __init__(self, M):
@@ -365,15 +367,17 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
         ## Load trained model
         model.load_state_dict(torch.load(args.model, map_location=torch.device(args.device)))
+        model.to(device)
         model.eval()
 
         ## Encode test and train data
         latents, labels = [], []
         with torch.no_grad():
             for x, y in mnist_train_loader:
+                x = x.to(device)
                 z = model.encoder(x)
                 latents.append(z.mean)
-                labels.append(y)
+                labels.append(y.to(device))
             latents = torch.concatenate(latents, dim=0)
             labels = torch.concatenate(labels, dim=0)
 
@@ -385,7 +389,7 @@ if __name__ == "__main__":
             
         ## Plot random geodesics
         num_curves = 50
-        curve_indices = torch.randint(num_train_data, (num_curves, 2))  # (num_curves) x 2
+        curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
         geodesics = []
         for k in range(num_curves):
             i = curve_indices[k, 0]
@@ -394,12 +398,12 @@ if __name__ == "__main__":
             z1 = latents[j]
             # TODO: Compute, and plot geodesic between z0 and z1
             num_points = 100
-            t = torch.linspace(0, 1, num_points).reshape(num_points, 1)
+            t = torch.linspace(0, 1, num_points, device=device).reshape(num_points, 1)
             
             initial_curve = (1-t) * z0 + t * z1
             parameters = torch.nn.Parameter(initial_curve[1:-1])
             optimizer = torch.optim.LBFGS([parameters], lr=0.1)
-            z_norm = torch.norm(z0, dim=-1)[None]
+            z_norm = torch.norm(z0, dim=-1)[None].to(device)
             
             def closure():
                 optimizer.zero_grad() 
