@@ -383,12 +383,14 @@ if __name__ == "__main__":
 
         ## Plot training data
         plt.figure()
+        cpu_latents = latents.cpu()
+        cpu_labels = labels.cpu()
         for k in range(num_classes):
-            idx = labels == k
-            plt.scatter(latents[idx, 0], latents[idx, 1])
+            idx = cpu_labels == k
+            plt.scatter(cpu_latents[idx, 0], cpu_latents[idx, 1])
             
         ## Plot random geodesics
-        num_curves = 50
+        num_curves = 10
         curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
         geodesics = []
         for k in range(num_curves):
@@ -397,12 +399,15 @@ if __name__ == "__main__":
             z0 = latents[i]
             z1 = latents[j]
             # TODO: Compute, and plot geodesic between z0 and z1
-            num_points = 100
+            num_points = 20
             t = torch.linspace(0, 1, num_points, device=device).reshape(num_points, 1)
             
             initial_curve = (1-t) * z0 + t * z1
             parameters = torch.nn.Parameter(initial_curve[1:-1])
-            optimizer = torch.optim.LBFGS([parameters], lr=0.1)
+            #optimizer = torch.optim.LBFGS([parameters], lr=0.01)
+            optimizer = torch.optim.Adam([parameters], lr=0.1)
+            #optimizer = torch.optim.SGD([parameters], lr=0.01, momentum=0.1, dampening=0.9, weight_decay=1e-4)
+
             z_norm = torch.norm(z0, dim=-1)[None].to(device)
             
             def closure():
@@ -430,7 +435,7 @@ if __name__ == "__main__":
 
                     # Compute the KL divergence between the two distributions
                     kl_div = td.kl_divergence(new_dist1, new_dist2)
-                    
+
                     if kl_div < 0:
                         print(kl_div)
 
@@ -449,6 +454,7 @@ if __name__ == "__main__":
 
                 # Divide by the number of points to get the average
                 #energy /= num_points
+                print(energy)
                 energy.backward()
                 
                 # #########################
@@ -467,13 +473,12 @@ if __name__ == "__main__":
 
             # I only loop 5 times because it takes much time
             # the result shows bad
-            for _ in range(5):
+            for _ in range(200):
                 optimizer.step(closure)
             
             geodesics.append(torch.cat([z0[None, :], parameters.detach(), z1[None, :]], dim=0))
-        
         for geo in geodesics:
-            plt.plot(geo[:, 0], geo[:, 1])
+            plt.plot(geo[:, 0].cpu(), geo[:, 1].cpu())
                 
         # plt.show()
         plt.savefig(args.plot)
