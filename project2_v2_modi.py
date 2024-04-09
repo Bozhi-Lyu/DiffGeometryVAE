@@ -12,6 +12,7 @@ import torch.utils.data
 from tqdm import tqdm
 torch.manual_seed(0)
 import matplotlib
+import matplotlib.pyplot as plt
 import random
 matplotlib.use('TkAgg')
 
@@ -297,18 +298,22 @@ def plotgeodesics(decoders, latents, labels, curve_indices, num_curves, filename
                 energy.backward()
                 return energy
 
-            for _ in range(50):
+            for _ in range(50): # Decrease this value if it's too time-consuming.
                 optimizer.step(closure)
 
-            pbar.set_description(f"k = {k+1}/{num_curves}")
+            pbar.set_description(f"{filename}, k = {k+1}/{num_curves}")
             geodesics.append(torch.cat([z0[None, :], parameters.detach(), z1[None, :]], dim=0))
             pbar.update(1)
 
 
     for geo in geodesics:
         plt.plot(geo[:, 0].cpu(), geo[:, 1].cpu())
-            
-    plt.savefig(filename)
+    
+    geo_tensor = torch.stack(geodesics, dim=0)
+    # print("geo_tensor.size(): ", geo_tensor.size())
+    torch.save(geo_tensor, 'geo_'+filename+'.pt')
+
+    plt.savefig(filename+'.png')
     return 
 
 if __name__ == "__main__":
@@ -318,7 +323,7 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', type=str, default='train', choices=['train', 'plot', 'ensembletrain'], help='what to do when running the script (default: %(default)s)')
+    parser.add_argument('mode', type=str, default='train', choices=['train', 'plot', 'ensembletrain', 'plotproximity'], help='what to do when running the script (default: %(default)s)')
     parser.add_argument('--model', type=str, default='model.pt', help='file to save model to or load model from (default: %(default)s)')
     parser.add_argument('--plot', type=str, default='plot.png', help='file to save latent plot in (default: %(default)s)')
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda', 'mps'], help='torch device (default: %(default)s)')
@@ -449,7 +454,6 @@ if __name__ == "__main__":
 
 
     elif args.mode == 'plot':
-        import matplotlib.pyplot as plt
         ## Load trained model in single VAE and Ensemble VAE
         model.load_state_dict(torch.load(args.model, map_location=torch.device(args.device)))
         model.eval()
@@ -475,13 +479,15 @@ if __name__ == "__main__":
             
         num_curves = 100
         curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
+        
+        ## Uncomment this to plot curves in Part A.
         # plotgeodesics(
         #     decoders=[model.decoder],
         #     latents=latents, 
         #     labels=labels, 
         #     curve_indices=curve_indices,
         #     num_curves=num_curves,
-        #     filename='singleplot.png')
+        #     filename='singleVAE')
         
         decoderlist = []
         for i in range(len(modellist)):
@@ -493,8 +499,60 @@ if __name__ == "__main__":
             labels=labels, 
             curve_indices=curve_indices,
             num_curves=num_curves,
-            filename='ensembleplot.png')
-    
+            filename='ensembleVAE')
+
+
+    elif args.mode == 'plotproximity':
+        modellist = [ VAE(prior, decoder, encoder) ] * 10
+        modellist = torch.load('ensemblemodels.pt')
+        enmodel = modellist[0].to(device)
+        enmodel.eval()
+
+        ## Encode test and train data
+        enlatents, labels = [], []
+        with torch.no_grad():
+            for x, y in mnist_train_loader:
+                enz = enmodel.getencoder()(x.to(device))
+                enlatents.append(enz.mean)
+                labels.append(y.to(device))
+            enlatents = torch.concatenate(enlatents, dim=0)
+            labels = torch.concatenate(labels, dim=0)
+
+        num_curves = 50
+        curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
+
+        decoderlist = []
+        for i in range(len(modellist)):
+            decoderlist.append(modellist[i].getdecoder())
+
+        # Start plotting
+        ave_prox_list = []
+        for i in range(len(decoderlist)):
+            dl = (decoderlist[:i+1])
+            plotgeodesics(
+                decoders=dl,
+                latents=enlatents, 
+                labels=labels, 
+                curve_indices=curve_indices,
+                num_curves=num_curves,
+                filename='ensembleVAE{}'.format(i+1))
+            
+            geo_tensor = torch.load('geo_'+'ensembleVAE{}'.format(i+1)+'.pt')
+            proximity_list = []
+            for i in range(geo_tensor.size()[0]):
+                proximity_list.append(proximity(geo_tensor[1], enlatents))
+
+            ave_prox = (sum(proximity_list)/len(proximity_list)).item()
+            print("ave_prox", ave_prox)
+            ave_prox_list.append(ave_prox)
+
+        numlist = list(range(1, len(ave_prox_list) + 1))
+        
+        plt.figure()
+        plt.plot(numlist,ave_prox_list,)
+        plt.xlabel("Number of ensemble members")
+        plt.ylabel("Average proximity")
+        plt.savefig("AveProximity.png")
 
 
 
