@@ -269,12 +269,12 @@ def plotgeodesics(decoders, latents, labels, curve_indices, num_curves, filename
         for k in range(num_curves):
             z0 = latents[curve_indices[k, 0]]
             z1 = latents[curve_indices[k, 1]]
-            num_points = 20
+            num_points = 50
             t = torch.linspace(0, 1, num_points, device=device).reshape(num_points, 1)
             
             initial_curve = (1-t) * z0 + t * z1
             parameters = torch.nn.Parameter(initial_curve[1:-1])
-            optimizer = torch.optim.Adam([parameters], lr=0.1)
+            optimizer = torch.optim.Adam([parameters], lr=0.01)
             # z_norm = torch.norm(z0, dim=-1)[None].to(device)
             
             def closure():
@@ -285,11 +285,11 @@ def plotgeodesics(decoders, latents, labels, curve_indices, num_curves, filename
                 for i in range(num_points-1):
 
                     # Compute the KL divergence for the current pair of points
-                    if len(decoders) == 1:
+                    if len(decoders) == 1: # single VAE
                         kl_div = kl_divergence_between_decoders(decoders, curve[i], curve[i + 1])
                     else: 
                         kl_divlist = []
-                        for _ in range(5):
+                        for _ in range(10): # Ensemble VAE
                             kl_divlist.append(kl_divergence_between_decoders(decoders, curve[i], curve[i + 1]))
                         kl_div = sum(kl_divlist)/len(kl_divlist)
 
@@ -298,7 +298,7 @@ def plotgeodesics(decoders, latents, labels, curve_indices, num_curves, filename
                 energy.backward()
                 return energy
 
-            for _ in range(50): # Decrease this value if it's too time-consuming.
+            for _ in range(40): # Decrease this value if it's too time-consuming.
                 optimizer.step(closure)
 
             pbar.set_description(f"{filename}, k = {k+1}/{num_curves}")
@@ -477,17 +477,17 @@ if __name__ == "__main__":
             labels = torch.concatenate(labels, dim=0)
 
             
-        num_curves = 100
+        num_curves = 200
         curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
         
-        ## Uncomment this to plot curves in Part A.
-        # plotgeodesics(
-        #     decoders=[model.decoder],
-        #     latents=latents, 
-        #     labels=labels, 
-        #     curve_indices=curve_indices,
-        #     num_curves=num_curves,
-        #     filename='singleVAE')
+        # Uncomment this to plot curves in Part A.
+        plotgeodesics(
+            decoders=[model.decoder],
+            latents=latents, 
+            labels=labels, 
+            curve_indices=curve_indices,
+            num_curves=num_curves,
+            filename='singleVAE')
         
         decoderlist = []
         for i in range(len(modellist)):
