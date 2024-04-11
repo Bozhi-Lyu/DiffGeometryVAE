@@ -390,7 +390,7 @@ if __name__ == "__main__":
             plt.scatter(cpu_latents[idx, 0], cpu_latents[idx, 1])
             
         ## Plot random geodesics
-        num_curves = 10
+        num_curves = 50
         curve_indices = torch.randint(num_train_data, (num_curves, 2), device=device)  # (num_curves) x 2
         geodesics = []
         for k in range(num_curves):
@@ -399,7 +399,7 @@ if __name__ == "__main__":
             z0 = latents[i]
             z1 = latents[j]
             # TODO: Compute, and plot geodesic between z0 and z1
-            num_points = 20
+            num_points = 100
             t = torch.linspace(0, 1, num_points, device=device).reshape(num_points, 1)
             
             initial_curve = (1-t) * z0 + t * z1
